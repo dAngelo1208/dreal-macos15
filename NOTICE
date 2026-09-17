@@ -1,0 +1,18 @@
+dReal for macOS 15+ (Apple Silicon)
+Copyright 2026 the contributors to this repository
+
+This product includes software developed as part of dReal
+(https://github.com/dreal/dreal4), licensed under the Apache License,
+Version 2.0. See LICENSE.
+
+This repository contains build scripts, patches and documentation only. It does
+not redistribute dReal or IBEX source code; those are downloaded from their
+upstream repositories at pinned revisions and verified by SHA256, and the
+patches in patches/ are applied to the downloaded trees.
+
+IBEX, built here from dreal-deps/ibex-lib at the revision pinned in
+versions.lock, is licensed under the GNU Lesser General Public License,
+version 3, and is linked dynamically.
+
+See docs/upstream-licenses.md for the licences of everything else this build
+requires or links, and for what they oblige anyone redistributing a binary.

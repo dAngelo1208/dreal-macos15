@@ -1,0 +1,27 @@
+--- a/.bazelrc
++++ b/.bazelrc
+@@ -9,7 +9,7 @@
+ build -c opt
+ 
+ # lexyacc
+-build --extra_toolchains=@dreal//third_party/com_github_google_kythe/tools/build_rules:lexyacc_remote_toolchain
++build --extra_toolchains=@local_lexyacc//:lexyacc_local_toolchain
+ 
+ # Default build options.
+ build --force_pic
+@@ -116,4 +116,13 @@
+ #
+ # When compiilng dReal as an external package, this rcfile is not loaded and we
+ # won't promote warnings to errors by default.
+-build --copt=-Werror
+\ No newline at end of file
++# dReal 4.21.06.2 predates Apple clang 21 and GCC 16, whose new warnings are
++# not actionable in an unmodified upstream tree, so -Werror is opt-in.
++build:werror --copt=-Werror
++
++### macOS arm64 (Homebrew) build. ###
++# Applied by scripts/build_dreal.sh; see patches/dreal/0007-bazelrc-lexyacc-toolchain-and-macos-arm64-config.patch.
++build:macos_arm64 --define=dreal_compiler=gcc
++build:macos_arm64 --copt=-Wno-error
++build:macos_arm64 --cxxopt=-w
++build:macos_arm64 --host_cxxopt=-w

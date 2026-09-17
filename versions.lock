@@ -1,0 +1,43 @@
+# Pinned inputs for dReal for macOS 15+ (Apple Silicon), v0.1
+#
+# Every upstream input is pinned by immutable revision and verified by SHA256
+# before use. scripts/lib/common.sh is the only consumer of this file; nothing
+# else parses it, so keep the `KEY=VALUE` / `KEY_SHA256=VALUE` shape.
+#
+# Sourced by: scripts/lib/common.sh
+
+# ---------------------------------------------------------------- dReal ----
+# Upstream tag 4.21.06.2. The tarball is fetched by commit rather than by tag
+# so that a moved tag cannot silently change the build.
+DREAL_VERSION=4.21.06.2
+DREAL_COMMIT=4067225cd85ae8668d8172ed5dc594f573721134
+DREAL_TARBALL=dreal4-${DREAL_COMMIT}.tar.gz
+DREAL_URL=https://github.com/dreal/dreal4/archive/${DREAL_COMMIT}.tar.gz
+DREAL_SHA256=5a99dbdc0b6c8950c99cd2e1a93d7cf98a12893779fdce16cfdaf1f82873cac1
+DREAL_SRCDIR=dreal4-${DREAL_COMMIT}
+
+# ----------------------------------------------------------------- IBEX ----
+# Upstream `ibex-2.7.4_13` is a BRANCH, not a tag, so it is resolved once and
+# pinned here by commit. Re-resolve deliberately if a newer revision is wanted;
+# do not reintroduce the branch URL, or clean-checkout builds will drift.
+IBEX_VERSION=2.7.4_13
+IBEX_COMMIT=26eeeaae51b0f1518cbab9751c872b83801dbec8
+IBEX_TARBALL=ibex-lib-${IBEX_COMMIT}.tar.gz
+IBEX_URL=https://github.com/dreal-deps/ibex-lib/archive/${IBEX_COMMIT}.tar.gz
+IBEX_SHA256=3fccae58fc7e220a0d1662e84be9876f58017b1a062004d5eff9e295221601b3
+IBEX_SRCDIR=ibex-lib-${IBEX_COMMIT}
+
+# ---------------------------------------------------------------- Bazel ----
+# dReal 4.21.06.2 predates Bazel 6; its WORKSPACE-only rules do not survive the
+# bzlmod transition. bazelisk is used purely as a version launcher.
+BAZEL_VERSION=5.4.1
+
+# --------------------------------------------------------------- Python ----
+# IBEX ships a Waf 2.0.12 build; it runs on Python 3 despite the python2.7
+# shebangs in its wscript files.
+IBEX_PYTHON_MIN=3.8
+
+# ------------------------------------------------------------ Install ------
+# Stable installation prefix. Nothing installed here may point back into
+# $BUILD_ROOT, the Bazel output base, or the Bazel external cache.
+INSTALL_ROOT_BASENAME=opt/dreal-macos15

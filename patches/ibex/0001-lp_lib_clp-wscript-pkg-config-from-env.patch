@@ -1,0 +1,34 @@
+--- a/plugins/lp_lib_clp/wscript
++++ b/plugins/lp_lib_clp/wscript
+@@ -3,6 +3,7 @@
+ 
+ import os
+ import platform
++import shutil
+ 
+ ######################
+ ###### options #######
+@@ -40,9 +41,21 @@
+     clp_kwargs = { "package": "clp", "args": "--cflags --libs",
+             "uselib_store": "LP_LIB" }
+ 
+-    # In macOS, use /usr/local/bin/pkg-config.
++    # On macOS the Intel Homebrew prefix (/usr/local) does not exist on
++    # Apple Silicon, where Homebrew installs under /opt/homebrew. Resolve
++    # pkg-config from the environment first, then from PATH, so the active
++    # Homebrew prefix is used instead of a hard-coded Intel path.
+     if platform.system() == 'Darwin':
+-        clp_kwargs["path"] = ["/usr/local/bin/pkg-config"]
++        pkg_config_candidates = []
++        env_pkg_config = os.environ.get("PKG_CONFIG")
++        if env_pkg_config:
++            pkg_config_candidates.append(env_pkg_config)
++        which_pkg_config = shutil.which("pkg-config")
++        if which_pkg_config and which_pkg_config not in pkg_config_candidates:
++            pkg_config_candidates.append(which_pkg_config)
++        if not pkg_config_candidates:
++            conf.fatal('pkg-config not found; set PKG_CONFIG or add it to PATH')
++        clp_kwargs["path"] = pkg_config_candidates
+ 
+     env_env_bak = conf.env.env
+ 

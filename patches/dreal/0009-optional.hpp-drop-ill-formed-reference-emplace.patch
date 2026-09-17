@@ -1,0 +1,26 @@
+--- a/third_party/com_github_tartanllama_optional/dreal/util/optional.hpp
++++ b/third_party/com_github_tartanllama_optional/dreal/util/optional.hpp
+@@ -1981,17 +1981,13 @@
+     m_value = std::addressof(rhs.value());
+     return *this;
+   }
+-
+-  /// Constructs the value in-place, destroying the current one if there is
+-  /// one.
+-  template <class... Args> T &emplace(Args &&... args) noexcept {
+-    static_assert(std::is_constructible<T, Args &&...>::value,
+-                  "T must be constructible with Args");
+ 
+-    *this = nullopt;
+-    this->construct(std::forward<Args>(args)...);
+-    return value();
+-  }
++  // `optional<T&>` stores a pointer, so there is no `construct` member to call
++  // and a reference cannot be constructed in place: `emplace` is ill-formed for
++  // this specialization and cannot be made to work. Upstream never noticed
++  // because clang defers the lookup to instantiation and nothing instantiates
++  // it; GCC 15+ diagnoses template bodies eagerly and rejects the header. The
++  // overload is removed rather than repaired.
+ 
+   void swap(optional &rhs) noexcept { std::swap(m_value, rhs.m_value); }
+ 

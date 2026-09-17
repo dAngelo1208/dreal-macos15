@@ -1,0 +1,73 @@
+name: macos-arm64
+
+# The gate is the same one a person runs: `make all`, from a clean checkout,
+# with no build environment prepared in advance. A runner that passes this has
+# reproduced the whole flow -- host checks, Homebrew dependencies, download and
+# SHA256 verification, IBEX, dReal, install, acceptance tests.
+#
+# GitHub's macos-14 and later runners are Apple Silicon. macOS 15 is the oldest
+# OS this project targets; see docs/macos.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: host
+        run: |
+          set -eux
+          uname -m
+          sw_vers
+          xcode-select -p
+          brew --version
+
+      - name: build, install and test
+        run: make all
+        env:
+          # Keep the Homebrew installs non-interactive and quiet.
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+      - name: the binary is what we think it is
+        run: |
+          set -eux
+          BIN="$(brew --prefix)/bin/dreal"
+          file "$BIN"
+          otool -L "$BIN"
+          "$BIN" --version
+
+      - name: one C++ runtime, and no build directory
+        run: |
+          set -eu
+          BIN="$(brew --prefix)/bin/dreal"
+          otool -L "$BIN" | grep -q 'libstdc++' \
+            || { echo "dreal does not link libstdc++ (see scripts/toolchain/cc-wrapper.sh)"; exit 1; }
+          if otool -L "$BIN" | grep -q 'libc++'; then
+            echo "dreal links libc++ as well as libstdc++; the compiler shim is not in effect"; exit 1
+          fi
+          # The install must be independent of where it was built.
+          if otool -L "$BIN" | tail -n +2 | grep -Eq '/bazel-|execroot|dreal-macos15/src|ibex-install|/tmp/|/var/folders/'; then
+            echo "the installed binary references a build or cache directory"; exit 1
+          fi
+          echo "linkage invariants hold"
+
+      - name: build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ~/Library/Caches/dreal-macos15/*.log
+          if-no-files-found: ignore

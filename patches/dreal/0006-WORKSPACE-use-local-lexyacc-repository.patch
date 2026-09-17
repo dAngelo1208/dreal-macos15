@@ -1,0 +1,18 @@
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -17,6 +17,15 @@
+ 
+ versions.check(minimum_bazel_version = "3.0.0")
+ 
++load(
++    "//third_party/com_github_google_kythe/tools/build_rules:lexyacc.bzl",
++    "local_lexyacc_repository",
++)
++
++# Resolves flex/bison from the build host's PATH (BISON may override bison)
++# instead of a hard-coded /usr/local/opt path.
++local_lexyacc_repository(name = "local_lexyacc")
++
+ github_archive(
+     name = "google_styleguide",  # BSD-3
+     build_file = "//tools:google_styleguide.BUILD.bazel",

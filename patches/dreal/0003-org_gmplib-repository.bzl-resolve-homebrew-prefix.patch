@@ -1,0 +1,58 @@
+--- a/third_party/org_gmplib/repository.bzl
++++ b/third_party/org_gmplib/repository.bzl
+@@ -1,18 +1,41 @@
++def _homebrew_prefix(repository_ctx):
++    """Returns the active Homebrew prefix.
++
++    Hard-coding /usr/local breaks Apple Silicon, where Homebrew installs
++    under /opt/homebrew. Prefer the explicit override, then the prefix
++    implied by the brew executable that is actually on PATH.
++    """
++    override = repository_ctx.os.environ.get("HOMEBREW_PREFIX", "")
++    if override:
++        return override
++    brew = repository_ctx.which("brew")
++    if brew:
++        # .../<prefix>/bin/brew
++        return str(brew.dirname.dirname)
++    return "/opt/homebrew"
++
++
+ def _impl(repository_ctx):
+     if repository_ctx.os.name == "mac os x":
++        gmp_prefix = repository_ctx.os.environ.get("GMP_PREFIX", "")
++        if not gmp_prefix:
++            gmp_prefix = _homebrew_prefix(repository_ctx) + "/opt/gmp"
+         repository_ctx.symlink(
+-            "/usr/local/opt/gmp/include/gmp.h",
++            gmp_prefix + "/include/gmp.h",
+             "include/gmp.h",
+         )
+         repository_ctx.symlink(
+-            "/usr/local/opt/gmp/include/gmpxx.h",
++            gmp_prefix + "/include/gmpxx.h",
+             "include/gmpxx.h",
+         )
+-        repository_ctx.symlink(
++        # A template rather than a symlink: the link directory depends on the
++        # Homebrew prefix, which is only known here.
++        repository_ctx.template(
++            "BUILD.bazel",
+             Label(
+                 "@dreal//third_party/org_gmplib:package-macos.BUILD.bazel",
+             ),
+-            "BUILD.bazel",
++            {"%{gmp_libdir}": gmp_prefix + "/lib"},
+         )
+     elif repository_ctx.os.name == "linux":
+         GMP_H_UBUNTU = "/usr/include/x86_64-linux-gnu/gmp.h"
+@@ -36,5 +59,9 @@
+ gmp_repository = repository_rule(
+     configure = True,
+     local = True,
++    environ = [
++        "HOMEBREW_PREFIX",
++        "GMP_PREFIX",
++    ],
+     implementation = _impl,
+ )

@@ -1,0 +1,22 @@
+--- a/third_party/com_github_google_kythe/tools/build_rules/BUILD.bazel
++++ b/third_party/com_github_google_kythe/tools/build_rules/BUILD.bazel
+@@ -10,14 +10,8 @@
+ 
+ lexyacc_variables(name = "current_lexyacc_toolchain")
+ 
+-lexyacc_toolchain(
+-    name = "lexyacc_remote",
+-    lex = select({
+-        "@dreal//tools:linux": "/usr/bin/flex",
+-        "@//conditions:default": "/usr/local/opt/flex/bin/flex",
+-    }),
+-    yacc = select({
+-        "@dreal//tools:linux": "/usr/bin/bison",
+-        "@//conditions:default": "/usr/local/opt/bison/bin/bison",
+-    }),
+-)
++# The former `lexyacc_remote` toolchain hard-coded
++# /usr/local/opt/{flex,bison}/bin, which does not exist on Apple Silicon and
++# is also stale on Intel (flex is not keg-only there, bison is). The
++# toolchain now comes from the `local_lexyacc` repository, which resolves
++# the binaries on the build host's PATH; see lexyacc.bzl.

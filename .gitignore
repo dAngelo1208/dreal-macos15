@@ -1,0 +1,7 @@
+# Build output and caches. Everything under BUILD_ROOT is reproducible from
+# versions.lock + patches/, so none of it is checked in.
+.build*/
+bazel-*
+*.log
+
+.DS_Store

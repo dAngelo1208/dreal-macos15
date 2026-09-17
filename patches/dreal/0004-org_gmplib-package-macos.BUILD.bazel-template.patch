@@ -1,0 +1,15 @@
+--- a/third_party/org_gmplib/package-macos.BUILD.bazel
++++ b/third_party/org_gmplib/package-macos.BUILD.bazel
+@@ -9,8 +9,11 @@
+         "include/gmpxx.h",
+     ],
+     includes = ["include"],
++    # %{gmp_libdir} is substituted by third_party/org_gmplib/repository.bzl
++    # with the active Homebrew prefix; this file is not loadable as a BUILD
++    # file on its own.
+     linkopts = [
+-        "-L/usr/local/opt/gmp/lib",
++        "-L%{gmp_libdir}",
+         "-lgmpxx",
+         "-lgmp",
+     ],

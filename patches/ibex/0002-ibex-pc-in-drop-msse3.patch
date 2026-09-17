@@ -1,0 +1,10 @@
+--- a/ibex.pc.in
++++ b/ibex.pc.in
+@@ -6,6 +6,6 @@
+ Description: A C++ library for interval-based algorithm design
+ Version: @VERSION@
+ Requires: clp
+-Cflags: -I${includedir} -I${includedir}/ibex -I${includedir}/ibex/3rd -frounding-math -ffloat-store -msse3
++Cflags: -I${includedir} -I${includedir}/ibex -I${includedir}/ibex/3rd -frounding-math -ffloat-store
+ Libs: -L${libdir} -libex
+ 

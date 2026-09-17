@@ -1,0 +1,26 @@
+--- a/tools/BUILD
++++ b/tools/BUILD
+@@ -36,6 +36,13 @@
+ )
+ 
+ config_setting(
++    name = "apple_gcc",
++    constraint_values = ["@bazel_tools//platforms:osx"],
++    values = {"define": "dreal_compiler=gcc"},
++    visibility = ["//visibility:public"],
++)
++
++config_setting(
+     name = "clang_build",
+     flag_values = {
+         "@bazel_tools//tools/cpp:compiler": "clang",
+--- a/tools/dreal.bzl
++++ b/tools/dreal.bzl
+@@ -62,6 +62,7 @@
+     if cc_test:
+         extra_gcc_flags = GCC_CC_TEST_FLAGS
+     return select({
++        "//tools:apple_gcc": GCC_FLAGS + extra_gcc_flags + rule_copts,
+         "//tools:gcc_build": GCC_FLAGS + extra_gcc_flags + rule_copts,
+         "//tools:clang_build": CLANG_FLAGS + rule_copts,
+         "//tools:apple": CLANG_FLAGS + rule_copts,

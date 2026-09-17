@@ -1,0 +1,31 @@
+--- a/dreal/workspace.bzl
++++ b/dreal/workspace.bzl
+@@ -17,21 +17,17 @@
+     pkg_config_repository(
+         name = "ibex",  # LGPL3
+         modname = "ibex",
+-        pkg_config_paths = [
+-            # macOS
+-            "/usr/local/opt/clp/lib/pkgconfig",
+-            "/usr/local/opt/coinutils/lib/pkgconfig",
+-            "/usr/local/opt/ibex@2.7.4/share/pkgconfig",
+-            # Linux
+-            "/opt/libibex/2.7.4/share/pkgconfig",
+-        ],
++        # Intentionally empty. Hard-coding /usr/local/opt/... breaks Apple
++        # Silicon, where Homebrew lives under /opt/homebrew. This file is
++        # evaluated in the WORKSPACE dialect and cannot read the environment,
++        # so the build script exports PKG_CONFIG_PATH (derived from
++        # `brew --prefix`) and pkg_config.bzl appends it to these paths.
++        pkg_config_paths = [],
+     )
+     pkg_config_repository(
+         name = "nlopt",  # LGPL2 + MIT
+         modname = "nlopt",
+-        pkg_config_paths = [
+-            "/usr/local/opt/nlopt/lib/pkgconfig",
+-        ],
++        pkg_config_paths = [],
+     )
+ 
+     gmp_repository(name = "gmp")

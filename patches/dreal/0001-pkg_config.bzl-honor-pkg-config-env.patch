@@ -1,0 +1,60 @@
+--- a/third_party/com_github_robotlocomotion_drake/tools/workspace/pkg_config.bzl
++++ b/third_party/com_github_robotlocomotion_drake/tools/workspace/pkg_config.bzl
+@@ -1,14 +1,32 @@
+ _DEFAULT_TEMPLATE = Label("//third_party/com_github_robotlocomotion_drake:tools/workspace/pkg_config.BUILD.tpl")
+ 
+ _DEFAULT_STATIC = False
++
++def _pkg_config_path(repository_ctx, pkg_config_paths):
++    """Returns the PKG_CONFIG_PATH to run pkg-config with.
++
++    The paths declared by the rule come first; the caller's PKG_CONFIG_PATH
++    is appended rather than discarded. dreal/workspace.bzl runs in the
++    WORKSPACE dialect, which has no access to the environment, so it cannot
++    compute the active Homebrew prefix (/opt/homebrew on Apple Silicon, and
++    /usr/local on Intel) itself. The build script exports PKG_CONFIG_PATH
++    and this function honours it.
++    """
++    paths = []
++    for path in list(pkg_config_paths) + repository_ctx.os.environ.get(
++            "PKG_CONFIG_PATH", "").split(":"):
++        if path and path not in paths:
++            paths.append(path)
++    return ":".join(paths)
+ 
++
+ def _run_pkg_config(repository_ctx, command_line, pkg_config_paths):
+     """Run command_line with PKG_CONFIG_PATH = pkg_config_paths and return its
+     tokenized output."""
+-    pkg_config_path = ":".join(pkg_config_paths)
+     result = repository_ctx.execute(command_line,
+                                     environment = {
+-                                        "PKG_CONFIG_PATH": pkg_config_path,
++                                        "PKG_CONFIG_PATH": _pkg_config_path(
++                                            repository_ctx, pkg_config_paths),
+                                     })
+     if result.return_code != 0:
+         return struct(error = "error {} from {}: {}{}".format(
+@@ -25,9 +43,11 @@
+     intended to be called directly from the WORKSPACE file, or from a macro
+     that was called by the WORKSPACE file.
+     """
+-    # First locate pkg-config on the $PATH.
+-    tool_path = repository_ctx.which("pkg-config")
++    # Honour an explicit PKG_CONFIG, then fall back to the $PATH.
++    tool_path = repository_ctx.os.environ.get("PKG_CONFIG")
+     if not tool_path:
++        tool_path = repository_ctx.which("pkg-config")
++    if not tool_path:
+         return struct(error = "Could not find pkg-config on PATH={}".format(
+             repository_ctx.os.environ["PATH"]))
+     args = [tool_path, repository_ctx.attr.modname]
+@@ -201,6 +221,8 @@
+     },
+     environ = [
+         "PATH",
++        "PKG_CONFIG",
++        "PKG_CONFIG_PATH",
+     ],
+     local = True,
+     implementation = _impl,

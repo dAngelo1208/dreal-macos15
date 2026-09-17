@@ -1,0 +1,36 @@
+--- a/plugins/interval_lib_direct/wscript
++++ b/plugins/interval_lib_direct/wscript
+@@ -2,7 +2,7 @@
+ # encoding: utf-8
+ 
+ import ibexutils
+-import os, sys
++import os, sys, platform
+ from waflib import Logs
+ 
+ ######################
+@@ -27,14 +27,16 @@
+ 			uselib_store = "ITV_LIB")
+ 
+ 
+-	# Looking for filib headers and library.
+-	# We also test if we need to add sse2 or sse3 flags.
+-	D = {"mandatory": False, "errmsg": "no", "use": [ "IBEX", "ITV_LIB" ], "uselib_store": "ITV_LIB"}
+-	D["cxxflags"] = "-msse3"
+-	ret = conf.check_cxx (**D)
+-	if not ret:
+-		D["cxxflags"] = "-msse2"
+-		conf.check_cxx (**D)
++	# SSE2/SSE3 are x86-only. On other architectures the compiler accepts
++	# -msse3 while ignoring it, so an unconditional probe would silently
++	# export an x86-only flag to every consumer of ibex.pc.
++	if platform.machine() in ("x86_64", "i386", "i686", "AMD64"):
++		D = {"mandatory": False, "errmsg": "no", "use": [ "IBEX", "ITV_LIB" ], "uselib_store": "ITV_LIB"}
++		D["cxxflags"] = "-msse3"
++		ret = conf.check_cxx (**D)
++		if not ret:
++			D["cxxflags"] = "-msse2"
++			conf.check_cxx (**D)
+ 
+ 
+ 	# Define needed variables

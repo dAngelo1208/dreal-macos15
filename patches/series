@@ -1,0 +1,23 @@
+# Ordered patch series for dReal 4.21.06.2 on macOS 15+ / Apple Silicon.
+#
+# Apply with `patch -p1` from the root of the corresponding upstream source
+# tree. scripts/build_ibex.sh and scripts/build_dreal.sh do this automatically;
+# the files are kept separate from the scripts so they can be reviewed on their
+# own.
+#
+#   ibex/   applied to dreal-deps/ibex-lib @ 26eeeaae51b0f1518cbab9751c872b83801dbec8
+#   dreal/  applied to dreal/dreal4        @ 4067225cd85ae8668d8172ed5dc594f573721134
+
+ibex/0001-lp_lib_clp-wscript-pkg-config-from-env.patch
+ibex/0002-ibex-pc-in-drop-msse3.patch
+ibex/0003-interval_lib_direct-wscript-x86-only-sse.patch
+
+dreal/0001-pkg_config.bzl-honor-pkg-config-env.patch
+dreal/0002-workspace.bzl-drop-hardcoded-homebrew-paths.patch
+dreal/0003-org_gmplib-repository.bzl-resolve-homebrew-prefix.patch
+dreal/0004-org_gmplib-package-macos.BUILD.bazel-template.patch
+dreal/0005-kythe-BUILD.bazel-drop-intel-lexyacc-toolchain.patch
+dreal/0006-WORKSPACE-use-local-lexyacc-repository.patch
+dreal/0007-bazelrc-lexyacc-toolchain-and-macos-arm64-config.patch
+dreal/0008-tools-select-gcc-copts-explicitly.patch
+dreal/0009-optional.hpp-drop-ill-formed-reference-emplace.patch
