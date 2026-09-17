@@ -1,237 +1,173 @@
-# dReal for macOS 15+ (Apple Silicon), v0.2
+# dReal for macOS 15+ (Apple Silicon) · v0.2
 
-A reproducible build of the [dReal](https://github.com/dreal/dreal4) SMT solver
-for macOS 15 and later on Apple Silicon, produced from an unmodified upstream
-release plus a small, reviewable patch series.
+A one-command build of the [dReal](https://github.com/dreal/dreal4) solver for
+macOS 15 and later on Apple Silicon.
 
-`dReal 4.21.06.2` and `IBEX 2.7.4_13` are pinned to exact commits with verified
-SHA256 hashes. From a clean checkout, one command checks the host, installs the
-Homebrew dependencies, downloads and patches both sources, builds them, installs
-`dreal` and the `dreal` Python module into the Homebrew prefix, and runs both
-acceptance suites.
+dReal reasons about **nonlinear real arithmetic**. You give it a formula; it
+tells you whether a solution exists, and if one does, hands you a box that
+contains it. This repository builds dReal from verified upstream sources — never
+from a prebuilt binary — and installs both the command-line tool and the Python
+module.
 
 This is an independent project. It does not depend on, modify, or share any code
 with any other solver wrapper.
 
-## Status
+## ✨ What you get
 
 | | |
 |---|---|
-| Platform | macOS 15+ on Apple Silicon (arm64) |
-| Interface | `dreal` CLI and `import dreal` (Python 3.11) |
-| Upstream | dReal 4.21.06.2, IBEX 2.7.4_13 |
-| Bazel | 5.4.1, via bazelisk |
-| pybind11 | v2.11.1 (compiled in; not a runtime dependency) |
-| C++ toolchain | Homebrew GCC 16 (so dReal and IBEX share one `libstdc++`), with a compiler shim; see [docs/macos.md](docs/macos.md) |
+| 🖥️ Platform | macOS 15+ on Apple Silicon |
+| ⌨️ Interfaces | the `dreal` command, and `import dreal` in Python 3.11 |
+| 📌 Sources | dReal 4.21.06.2 and IBEX 2.7.4_13, pinned by commit and SHA256 |
+| 🧪 Tests | 14 command-line and 38 Python acceptance tests, run against what was installed |
 
-Intel macOS and prebuilt releases are out of scope; see
-[Future work](#future-work).
+Intel Macs are not supported — see the Future work section at the end.
 
-## Requirements
+## 📋 What you need first
 
 - macOS 15 or later on Apple Silicon
-- Xcode Command Line Tools (`xcode-select --install`)
+- Xcode Command Line Tools — `xcode-select --install`
 - [Homebrew](https://brew.sh) at `/opt/homebrew`
 
-Everything else is installed by the bootstrap step. `Brewfile` lists the exact
-formulae; run `brew bundle --file=Brewfile` yourself if you prefer to install
-them by hand.
+Everything else is installed for you. If you would rather install the
+dependencies yourself, run `brew bundle --file=Brewfile`.
 
-Two Homebrew Pythons are used, for two different halves of the build: `python@3.10`
-runs IBEX's bundled Waf, and `python@3.11` is the interpreter the Python binding
-is compiled for. Neither replaces the other; see `versions.lock`.
-
-## Quick start
+## 🚀 Install
 
 ```bash
 make all
 ```
 
-`make all` is the whole pipeline: `bootstrap`, `ibex`, `dreal`, `install`,
-`binding`, `install-binding`, `test`. Each target can also be run on its own:
-
-```bash
-make bootstrap        # host checks, Homebrew deps, download + verify upstream sources
-make ibex             # build and stage IBEX into the build root
-make dreal            # build the dreal binary with Bazel 5.4.1
-make install          # install into $(brew --prefix)/opt/dreal-macos15
-make binding          # build the Python extension module
-make install-binding  # stage `import dreal` under the install prefix
-make test             # both acceptance suites, against what is installed
-```
-
-Then:
+That single command runs the whole pipeline: it checks your machine, installs
+the Homebrew dependencies, downloads and patches the sources, builds them,
+installs everything, and runs the tests. Then:
 
 ```bash
 dreal --version
 dreal tests/smoke_qfnra.smt2
 ```
 
-`make install` puts the binary at
-`$(brew --prefix)/opt/dreal-macos15/bin/dreal` and links it to
-`$(brew --prefix)/bin/dreal`. If you use a conda environment, call the absolute
-path or make sure the Homebrew bin directory is on that environment's `PATH`:
+Each step can also be run on its own, if you want to watch it happen or only
+redo part of it:
+
+```bash
+make bootstrap        # host checks, Homebrew dependencies, download sources
+make ibex             # build IBEX, the interval library dReal sits on
+make dreal            # build the dreal binary
+make install          # install into $(brew --prefix)/opt/dreal-macos15
+make binding          # build the Python module
+make install-binding  # install `import dreal`
+make test             # run both acceptance suites
+```
+
+`make install` puts the binary in Homebrew's prefix and links it into your
+`PATH`. Using a conda environment? Call the absolute path, or make sure
+Homebrew's `bin` directory is on that environment's own path:
 
 ```bash
 conda run -n mikl dreal --version
 ```
 
-## Python binding
-
-`make install-binding` stages the module under the install prefix, at
-`$(brew --prefix)/opt/dreal-macos15/lib/python3.11/site-packages`. That location
-is deliberately *not* on any interpreter's default path — it is the project's
-own, next to the CLI whose `libibex` it shares — so the script ends by printing
-how to reach it:
+## 🐍 The Python module
 
 ```bash
 PYTHONPATH="$(brew --prefix)/opt/dreal-macos15/lib/python3.11/site-packages" \
   python3.11 -c 'import dreal; print(dreal.__version__)'
 ```
 
-To install it into an interpreter instead, point the installer at that
-interpreter's own site-packages. This is the path for a conda environment:
+To install it into a particular interpreter instead — a conda environment, for
+example — point the installer at that interpreter:
 
 ```bash
 scripts/install_binding.sh --site-packages --python "$(conda run -n mikl which python)"
 conda run -n mikl python -c 'import dreal; print(dreal.__version__)'
 ```
 
-Both forms can coexist: the staged copy is the project's, the site-packages copy
-belongs to that environment, and both load the same `libdreal.so` and the same
-`libibex.dylib` as the `dreal` binary, so a process never holds two copies of the
-solver.
+Two things are worth knowing:
 
-The extension is compiled against one interpreter's headers and loaded by that
-interpreter's ABI, so it is bound to the Python series in `versions.lock` (3.11).
-A second interpreter of the same series can load it; a different series cannot,
-and the installer refuses rather than producing something that fails at import.
-`make binding BINDING_PYTHON=/path/to/python3.11` selects a different interpreter
-of that series, e.g. one inside a conda environment.
+- The module is tied to **one Python series** (3.11), because it is a compiled
+  extension. Any other 3.11 can load it; 3.12 cannot, and the installer says so
+  rather than leaving you with an import that fails later.
+- **Ctrl-C works.** The solver checks for interrupts while it is running, so a
+  query you get tired of waiting for returns you to the prompt instead of
+  running to completion.
 
-Ctrl-C interrupts the solver from Python. The binding is built with
-`-DDREAL_CHECK_INTERRUPT`, which makes the solver's inner loops check for SIGINT
-and raise, so an interrupted `CheckSatisfiability` returns to the prompt instead
-of running to completion.
-
-## What the build does with your machine
+## 📦 What it puts on your machine
 
 Nothing is written inside the checkout except build logs. Downloads, extracted
-sources, the staged IBEX install and the Bazel output base all live under
-`~/Library/Caches/dreal-macos15` (override with `BUILD_ROOT=...`) and
-`~/Library/Caches/bazel`. `make clean` removes the former, `make distclean` also
-removes the latter.
-
-To prove the build really is reproducible from a clean checkout rather than from
-leftovers:
+sources and the build cache all live under `~/Library/Caches`. To prove that a
+build really came from a clean state and not from old leftovers:
 
 ```bash
 make distclean && make all
 ```
 
-## Repository layout
+## ⚠️ Known limitations
+
+This is the honest part, and it matters more than everything above.
+
+**`unsat` and `delta-sat` are not reliable for quantified, integer or
+optimisation problems.** (`unsat` means "no solution exists"; `delta-sat` means
+"satisfiable up to a small tolerance δ".) Two of dReal's answers are wrong, and
+we can prove it:
+
+- An integer problem whose solution is `a = 0, b = 1, c = 5` is reported `unsat`.
+- A `forall` query that has no solution at all is reported `delta-sat`.
+
+Both are long-standing bugs in dReal itself
+([#280](https://github.com/dreal/dreal4/issues/280),
+[#302](https://github.com/dreal/dreal4/issues/302),
+[#321](https://github.com/dreal/dreal4/issues/321)) — not something this build
+introduced. Separately, `dreal.Minimize` returns `None` for some objectives.
+
+**The quantifier-free nonlinear real arithmetic dReal is known for is
+unaffected.** That is the part that is fast and correct here, and for most
+people it is the part they want. [docs/macos.md](docs/macos.md) has the full
+detail on both limitations.
+
+## 🧪 What the tests check
+
+`make test` runs both suites against what was actually installed, with no
+build-time environment set — so a test that quietly depends on the shell that
+built dReal fails instead of passing.
+
+For the command-line tool: it is arm64, it reports version 4.21.06.2, it runs
+under `env -i` (an empty environment), nothing in it points back at the build
+directory, every C++ symbol it needs is genuinely provided by something it
+links against, and three smoke queries return the right answers.
+
+For the Python module: everything is arm64 and links a single C++ standard
+library, the module and the command-line tool share one IBEX, nothing points
+back into the build tree, `import dreal` works with an empty environment, the
+solver returns the expected values, and two extension modules cannot
+accidentally end up holding two copies of the solver's state.
+
+## 🗺️ Repository layout
 
 ```
-versions.lock              pinned versions, commits and SHA256 hashes
-Brewfile                   Homebrew dependencies
-Makefile                   the pipeline
-LICENSE, NOTICE            this repository is Apache-2.0; see docs/upstream-licenses.md
-patches/                   every source change, as reviewable patches
-  series                   ordered list; see the header for provenance
-  ibex/                    applied to IBEX
-  dreal/                   applied to dReal
-scripts/
-  bootstrap_macos.sh       host checks, dependencies, source download
-  build_ibex.sh            IBEX, direct interval library, staged install
-  build_dreal.sh           dReal, Bazel 5.4.1, links the staged IBEX
-  install_macos.sh         install, rewrite install names, ad-hoc codesign
-  build_binding.sh         the Python extension module, against the same IBEX
-  install_binding.sh       stage `import dreal`, rewrite install names
-  toolchain/cc-wrapper.sh  compiler shim: Bazel's hardcoded -lc++ -> -lstdc++
-  lib/common.sh            shared helpers; every script sources this
-tests/
-  smoke_qfnra.smt2         x^2 > 0.25 over [-1, 1]     -> delta-sat
-  smoke_unsat.smt2         x^2 + y^2 > 3 over [0, 1]^2 -> unsat
-  smoke_trig.smt2          sin x > 0.99 and cos x < 0.2 -> delta-sat
-  test_binary.sh           CLI acceptance tests
-  test_binding.sh          Python binding acceptance tests
-docs/
-  macos.md                 why each patch exists, and how to maintain it
-  upstream-licenses.md     licence audit for dReal, IBEX and the deps
-.github/workflows/         macOS arm64 CI: `make all` from a clean checkout
+versions.lock        pinned versions, commits and SHA256 hashes
+Brewfile             Homebrew dependencies
+Makefile             the pipeline
+patches/             every source change, as reviewable patches
+scripts/             one script per build step
+tests/               acceptance tests and smoke queries
+docs/                why each patch exists; licence audit
+.github/workflows/   CI: `make all` from a clean checkout
 ```
 
-`patches/` is the only place source changes live. Nothing is fixed by editing
-generated files in a build cache; see `docs/macos.md` for why that distinction
-matters here.
+The build never edits dReal's or IBEX's sources in place. Every change is a
+patch file under `patches/`, so you can read exactly what was changed and why —
+including the full reasoning in [docs/macos.md](docs/macos.md).
 
-## Acceptance tests
+## 🔭 Future work
 
-`make test` runs both suites against what is installed, with no build-time
-environment set, so a test that needs `CC` or `BUILD_ROOT` fails.
+- Intel Macs. Most of the work is already done; the untested part is the
+  compiler pinning and the code-signing step.
+- A prebuilt, signed release, so you do not need a toolchain at all.
+- A Python series newer than 3.11. dReal's build reads the interpreter's paths
+  through a module that Python removed in 3.12, so this needs a patch first.
 
-`tests/test_binary.sh` checks the CLI:
-
-- the binary is arm64 and its version string is `4.21.06.2`
-- `otool -L` shows no reference to the build root, the Bazel output base or any
-  temporary directory
-- the binary runs with an empty environment (`env -i`), so it does not depend on
-  the shell that built it
-- every C++ symbol the binary needs has a provider somewhere in its dependency
-  closure, which is the invariant `patches/dreal/0011` was written to restore:
-  the CLI used to segfault on `(get-value …)` because `libgmpxx` is built against
-  libc++ and exported the symbol under a mangling this binary does not ask for
-- a QF_NRA `delta-sat` probe, an `unsat` probe, and a nonlinear trigonometric
-  probe all return the expected answers
-- `conda run -n mikl dreal --version` works, if that environment exists
-
-`tests/test_binding.sh` checks the Python module:
-
-- the package is `__init__.py` plus the two extension modules plus `libdreal.so`,
-  all arm64, and `BINDING-INFO` records the interpreter series this build is
-  bound to
-- everything links `libstdc++` and nothing links `libc++` or `libpython`, so a
-  process holds one C++ runtime and resolves CPython's symbols from whichever
-  3.11 loaded it
-- the two extension modules reach the symbolic layer through `@loader_path`,
-  and the binding and the CLI resolve the *same* `libibex.dylib`
-- no dependency points at the build root, the Bazel output base or a temp
-  directory, and every non-system dependency resolves to a file that exists
-- `libdreal.so` and both extension modules have every C++ symbol they need
-  provided, the same check the CLI suite runs
-- `import dreal` works under `env -i`, and the solver probes return the expected
-  `Box`, `True`, `None` and minimum
-- the two extension modules produce distinct `Variable` ids, which is the
-  one-symbolic-layer invariant upstream's `odr_test.py` guards
-- `conda run -n mikl python -c 'import dreal'` works, if that environment has
-  the module installed
-
-## Known limitations
-
-`unsat` and `delta-sat` are **not reliable for quantified, integer or
-optimisation problems** on this build. Two failures are proved and reproduced in
-[`docs/macos.md`](docs/macos.md): an integer formula with the solution
-`a = 0, b = 1, c = 5` is reported `unsat`, and a `forall` query that is
-unsatisfiable is reported `delta-sat` — both are open upstream issues (`#280`,
-`#302`, `#321`), not artefacts of this port. The quantifier-free nonlinear real
-arithmetic the solver is known for is unaffected.
-
-`dreal.Minimize` also returns `None` for some objectives; the same section
-records which and why. `docs/macos.md` explains both, and why the upstream SMT2
-corpus cannot be used as an oracle for either.
-
-## Future work
-
-- Intel macOS: the patch series is written to resolve the Homebrew prefix
-  dynamically, so the hardcoded paths are already gone. What is untested there
-  is the GCC/`libstdc++` pinning and the ad-hoc codesigning step.
-- A prebuilt, signed release so that users do not need a full toolchain.
-- Python series newer than 3.11. dReal's vendored `python_configure` reads the
-  interpreter's include path through `distutils`, which 3.12 removed; supporting
-  a newer series means patching that, and then moving the pin in `versions.lock`.
-
-
-## Licence
+## 📄 Licence
 
 This repository's own scripts, patches and documentation are provided under the
 Apache License 2.0, matching dReal. dReal itself is Apache-2.0; IBEX is LGPL-3.0
