@@ -16,7 +16,8 @@ brew "clp"          # LP solver backend for IBEX
 brew "coinutils"    # CLP's utility library
 brew "pkgconf"      # provides pkg-config, which both waf and Bazel query
 brew "bazelisk"     # Bazel version launcher; pins Bazel 5.4.1 via versions.lock
-brew "python@3.10"  # IBEX's bundled Waf 2.0.12 needs Python <= 3.10 (see below)
+brew "python@3.10"  # IBEX's bundled Waf 2.0.12 needs Python <= 3.10, and dReal's
+                    # Bazel build needs an interpreter that still ships distutils
 
 # Deliberately NOT listed:
 #
@@ -25,6 +26,11 @@ brew "python@3.10"  # IBEX's bundled Waf 2.0.12 needs Python <= 3.10 (see below)
 #                   only bazelisk honours that pin.
 #   python       -- unversioned; today that means 3.14, which cannot run Waf
 #                   2.0.12. python@3.10 above is the one the IBEX build uses.
+#                   It is also the one the Bazel build uses: dReal's vendored
+#                   TensorFlow python_configure asks the interpreter for its
+#                   include directory via `distutils`, removed in 3.12. Waiting
+#                   on setuptools' distutils shim instead would make the build
+#                   depend on what one machine happens to have installed.
 #   python@3.11,
 #   python@3.12+ -- too new for Waf 2.0.12, which imports `imp` (removed in
 #                   3.12) and opens wscripts in 'rU' mode (removed in 3.11).

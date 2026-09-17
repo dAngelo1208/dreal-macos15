@@ -29,6 +29,7 @@ setup_pkg_config
 setup_build_root
 setup_pkg_config_path
 setup_bazel
+setup_bazel_python
 
 [ -f "$IBEX_INSTALL/share/pkgconfig/ibex.pc" ] \
   || die "IBEX is not built yet. Run scripts/build_ibex.sh first."
@@ -60,6 +61,12 @@ log "bazel shutdown (drop any stale client environment)"
 # actions run in a sandbox with a stripped environment, and the repository rule
 # that identifies the compiler runs in the client environment. Neither would see
 # it otherwise.
+# PYTHON_BIN_PATH is read by the vendored TensorFlow python_configure repository
+# rule, which otherwise falls back to whatever `python3` is on PATH -- and a
+# Python 3.12+ interpreter has no distutils, so the fetch fails and the build
+# dies during analysis. setup_bazel_python (scripts/lib/common.sh) probes for an
+# interpreter that still works and pins it here. It is a repository env because
+# repository rules see the declared client environment, not the sandbox's.
 log "building //dreal:dreal"
 set -o pipefail
 CC="$CC" \
@@ -72,6 +79,7 @@ CXX="$CXX" \
   --repo_env=PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
   --repo_env=HOMEBREW_PREFIX="$BREW_PREFIX" \
   --repo_env=GMP_PREFIX="$GMP_PREFIX" \
+  --repo_env=PYTHON_BIN_PATH="$BAZEL_PYTHON" \
   --repo_env=CC="$CC" \
   --repo_env=CXX="$CXX" \
   --repo_env=DREAL_REAL_CC="$DREAL_REAL_CC" \

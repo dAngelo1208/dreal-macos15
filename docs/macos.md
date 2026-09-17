@@ -37,6 +37,7 @@ verifies every download against its hash before extracting.
 | Bazel | 5.4.1 | `USE_BAZEL_VERSION`, checked at runtime |
 | GCC | 16 (Homebrew) | resolved from `$(brew --prefix gcc)` |
 | Python (waf) | 3.10 | resolved by probing, see below |
+| Python (Bazel) | has `distutils` | resolved by probing, see below |
 
 Notes on two of these:
 
@@ -246,6 +247,33 @@ mode, and uses the first that works, with `/usr/bin/python3` (3.9) as a fallback
 if `python@3.10` is not installed. The failure mode this avoids is subtle: a
 `python3` that is new enough to look plausible and too new to run waf.
 
+**A Python with `distutils` for the Bazel build.** Two different interpreters are
+in play, for two unrelated reasons, and it is a coincidence that one Python
+version satisfies both. dReal vendors TensorFlow's `python_configure` repository
+rule, and that rule asks the interpreter it selected for its include directory:
+
+```
+python3 -c 'from distutils import sysconfig; print(sysconfig.get_python_inc())'
+```
+
+`distutils` was removed in Python 3.12. When the rule cannot get an answer, the
+build stops during analysis — before a single file is compiled — with
+`Problem getting python include path`. This is the failure that a CI run caught
+while the same tree built fine on a developer machine, and the reason is worth
+recording, because it is the kind of state that makes a build look reproducible
+when it is not: `setuptools` ships its own `distutils` shim, so on an
+interpreter where `setuptools` happens to be installed the import succeeds and
+nothing appears to be wrong. The build was depending on an accident of one
+machine's site-packages.
+
+The rule leaves no room for guessing: it declares `PYTHON_BIN_PATH` in its
+`environ`, so `--repo_env=PYTHON_BIN_PATH` decides it, and `setup_bazel_python`
+in `scripts/lib/common.sh` probes candidate interpreters by running that exact
+expression — not by checking a version number — and exports the first one where
+`distutils` is real. `scripts/build_dreal.sh` passes the result through, the
+same way it passes `PKG_CONFIG_PATH` and `BISON`. No patch is involved: the
+upstream rule already supports being told, it simply was not being told.
+
 **Ad-hoc codesigning after `install_name_tool`.** On Apple Silicon, modifying a
 Mach-O binary's load commands invalidates its signature, and the kernel kills
 the result. `scripts/install_macos.sh` rewrites the install names, then
@@ -276,6 +304,7 @@ it exports everything downstream:
 | `PKG_CONFIG` | `setup_pkg_config` | IBEX's CLP plugin, `pkg_config.bzl` |
 | `PKG_CONFIG_PATH` | `setup_pkg_config_path` | `pkg_config.bzl`, `dreal/0001` |
 | `IBEX_PYTHON` | `setup_ibex_python` | `scripts/build_ibex.sh` |
+| `BAZEL_PYTHON` | `setup_bazel_python` | `scripts/build_dreal.sh`, which passes it as `PYTHON_BIN_PATH` |
 | `HOMEBREW_PREFIX` | `setup_homebrew` | `gmp_repository`, `dreal/0003` |
 | `GMP_PREFIX` | `scripts/build_dreal.sh` | `gmp_repository`, `dreal/0003` |
 | `USE_BAZEL_VERSION` | `setup_bazel` | bazelisk |

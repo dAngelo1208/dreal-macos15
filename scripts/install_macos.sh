@@ -28,6 +28,10 @@ setup_homebrew
 setup_gcc
 setup_pkg_config
 setup_build_root
+# Not used to build anything here, but BUILD-INFO records which interpreter the
+# Bazel build needed -- knowing it later is the difference between "this failed
+# on a machine with a new Python" and "we have no idea what it used".
+setup_bazel_python
 
 INSTALL_ROOT="${PREFIX_OVERRIDE:-$BREW_PREFIX/$INSTALL_ROOT_BASENAME}"
 BIN_SRC="$DREAL_SRC/bazel-bin/dreal/dreal"

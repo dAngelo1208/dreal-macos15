@@ -175,6 +175,61 @@ $(printf '  %s\n' "${candidates[@]}")
 Run scripts/bootstrap_macos.sh to install Homebrew python@3.10."
 }
 
+# dReal's Bazel build fetches `local_config_python`, a vendored TensorFlow
+# repository rule, which asks the interpreter Bazel picked for its include
+# directory:
+#
+#   python3 -c 'from distutils import sysconfig; print(sysconfig.get_python_inc())'
+#
+# `distutils` was removed in Python 3.12, so a modern interpreter fails the
+# fetch and the build aborts during analysis, before a single file is compiled.
+# Why this can pass on one machine and fail on another is worth knowing: if the
+# interpreter happens to have `setuptools` installed, setuptools' own distutils
+# shim answers the import and nothing looks wrong. That is a property of the
+# machine, not of this build, and it is what the CI run caught. So the
+# interpreter is chosen here -- by running the same expression the rule runs --
+# and handed to Bazel as PYTHON_BIN_PATH; the rule declares it in `environ`, so
+# `--repo_env` reaches it (see scripts/build_dreal.sh).
+_bazel_python_ok() {
+  local inc
+  inc="$("$1" -c 'from distutils import sysconfig; print(sysconfig.get_python_inc())' 2>/dev/null)" \
+    || return 1
+  [ -n "$inc" ] && [ -d "$inc" ]
+}
+setup_bazel_python() {
+  local prefix py
+  local -a candidates=()
+
+  prefix="$(brew --prefix python@3.10 2>/dev/null || true)"
+  [ -n "$prefix" ] && candidates+=("$prefix/bin/python3.10")
+  # The Command Line Tools interpreter is a usable fallback: it is Python 3.9
+  # today, which still ships distutils.
+  candidates+=("/usr/bin/python3")
+  py="$(command -v python3 2>/dev/null || true)"
+  [ -n "$py" ] && candidates+=("$py")
+
+  for py in "${candidates[@]}"; do
+    [ -x "$py" ] || continue
+    if _bazel_python_ok "$py"; then
+      export BAZEL_PYTHON="$py"
+      ok "bazel python $("$py" -c 'import sys; print(sys.version.split()[0])') ($py)"
+      return 0
+    fi
+  done
+
+  die "no Python with a working distutils was found for dReal's Bazel build.
+
+dReal's local_config_python rule asks the interpreter for its include directory
+via 'from distutils import sysconfig', and distutils was removed in Python 3.12.
+Tried:
+$(printf '  %s\n' "${candidates[@]}")
+
+This can look like it works when the interpreter happens to have setuptools
+installed, because setuptools provides a distutils shim; that is an accident of
+the machine and not something to depend on.
+Run scripts/bootstrap_macos.sh to install Homebrew python@3.10."
+}
+
 # ------------------------------------------------------------- build env ---
 # BUILD_ROOT holds downloaded tarballs, extracted sources and the staged IBEX
 # install. It is deliberately outside the repository: the acceptance criteria
@@ -285,6 +340,7 @@ write_build_info() {
     echo "cc_wrapper         ${CC:-unknown}"
     echo "cc_wrapper_sha256  $(shasum -a 256 "${CC:-/dev/null}" 2>/dev/null | awk '{print $1}')"
     echo "pkg_config         ${PKG_CONFIG:-unknown}"
+    echo "bazel_python       ${BAZEL_PYTHON:-unknown}"
     echo "build_root         ${BUILD_ROOT:-unknown}"
     echo "build_date_utc     $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } > "$out"
