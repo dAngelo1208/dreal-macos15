@@ -21,3 +21,5 @@ dreal/0006-WORKSPACE-use-local-lexyacc-repository.patch
 dreal/0007-bazelrc-lexyacc-toolchain-and-macos-arm64-config.patch
 dreal/0008-tools-select-gcc-copts-explicitly.patch
 dreal/0009-optional.hpp-drop-ill-formed-reference-emplace.patch
+dreal/0010-pybind11-bump-to-2.11.1-and-add-its-headers.patch
+dreal/0011-smt2-driver.cc-print-integers-via-the-gmp-c-api.patch

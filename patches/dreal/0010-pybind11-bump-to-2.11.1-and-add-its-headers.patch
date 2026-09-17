@@ -1,0 +1,63 @@
+--- a/dreal/workspace.bzl
++++ b/dreal/workspace.bzl
+@@ -69,9 +69,13 @@
+     github_archive(
+         name = "pybind11",  # BSD
+         build_file = str(Label("//tools:pybind11.BUILD.bazel")),
+-        commit = "v2.6.2",
++        # Upstream pins v2.6.2 (Dec 2020), which binds CPython's internal
++        # structures rather than a stable ABI. Python 3.11 made PyFrameObject
++        # opaque, so 2.6.2 does not compile against the interpreter the Python
++        # binding is built for; v2.11.1 is the oldest release that supports it.
++        commit = "v2.11.1",
+         repository = "pybind/pybind11",
+-        sha256 = "8ff2fff22df038f5cd02cea8af56622bc67f5b64534f1b83b9f133b8366acff2",
++        sha256 = "d475978da0cdc2d43b73f30910786759d593a9d8ee05b1b6846d1eb16c6d2e0c",
+     )
+
+     github_archive(
+--- a/tools/pybind11.BUILD.bazel
++++ b/tools/pybind11.BUILD.bazel
+@@ -3,28 +3,42 @@
+ cc_library(
+     name = "pybind11",
+     hdrs = [
++        # Hand-maintained, and it has to match the pybind11 revision pinned in
++        # dreal/workspace.bzl: Bazel compiles against exactly the headers named
++        # here, so a header that pybind11 adds and this list omits is an include
++        # that cannot be resolved. patches/dreal/0010 appends the nine headers
++        # that v2.11.1 has and v2.6.2 did not.
+         "include/pybind11/attr.h",
+         "include/pybind11/buffer_info.h",
+         "include/pybind11/cast.h",
+         "include/pybind11/chrono.h",
++        "include/pybind11/common.h",
+         "include/pybind11/complex.h",
+         "include/pybind11/detail/class.h",
+         "include/pybind11/detail/common.h",
+         "include/pybind11/detail/descr.h",
+         "include/pybind11/detail/init.h",
+         "include/pybind11/detail/internals.h",
++        "include/pybind11/detail/type_caster_base.h",
+         "include/pybind11/detail/typeid.h",
+         "include/pybind11/eigen.h",
++        "include/pybind11/eigen/common.h",
++        "include/pybind11/eigen/matrix.h",
++        "include/pybind11/eigen/tensor.h",
+         "include/pybind11/embed.h",
+         "include/pybind11/eval.h",
+         "include/pybind11/functional.h",
++        "include/pybind11/gil.h",
+         "include/pybind11/iostream.h",
++        "include/pybind11/numpy.h",
+         "include/pybind11/operators.h",
+         "include/pybind11/options.h",
+         "include/pybind11/pybind11.h",
+         "include/pybind11/pytypes.h",
+         "include/pybind11/stl.h",
++        "include/pybind11/stl/filesystem.h",
+         "include/pybind11/stl_bind.h",
++        "include/pybind11/type_caster_pyobject_ptr.h",
+     ],
+     copts = [
+         "-fexceptions",

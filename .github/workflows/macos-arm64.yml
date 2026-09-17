@@ -3,7 +3,12 @@ name: macos-arm64
 # The gate is the same one a person runs: `make all`, from a clean checkout,
 # with no build environment prepared in advance. A runner that passes this has
 # reproduced the whole flow -- host checks, Homebrew dependencies, download and
-# SHA256 verification, IBEX, dReal, install, acceptance tests.
+# SHA256 verification, IBEX, dReal, the Python binding, both installs, and both
+# acceptance suites.
+#
+# The steps after `make all` are not a second test run: they are the claims this
+# project makes about its *artifacts*, asserted independently of the test
+# scripts, so that weakening a test cannot quietly relax what CI guarantees.
 #
 # GitHub's macos-14 and later runners are Apple Silicon. macOS 15 is the oldest
 # OS this project targets; see docs/macos.md.
@@ -21,7 +26,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +67,82 @@ jobs:
             echo "the installed binary references a build or cache directory"; exit 1
           fi
           echo "linkage invariants hold"
+
+      - name: the Python package is what we think it is
+        run: |
+          set -eux
+          # The series comes from versions.lock rather than being written out
+          # here, so this step moves with the pin instead of against it.
+          . ./versions.lock
+          PKG_DIR="$(brew --prefix)/$INSTALL_ROOT_BASENAME/lib/python$BINDING_PYTHON_SERIES/site-packages/dreal"
+          ls -la "$PKG_DIR"
+          cat "$PKG_DIR/BINDING-INFO"
+          for f in "$PKG_DIR/_dreal_py.so" "$PKG_DIR/_odr_test_module_py.so" "$PKG_DIR/libdreal.so"; do
+            file "$f"
+            otool -L "$f"
+          done
+
+          # It must not be reachable by the interpreter without being asked for:
+          # the package is staged where `make all` put it and nowhere else, so a
+          # bare `import dreal` fails and the documented PYTHONPATH is required.
+          # A binding that had wandered into site-packages would pass everything
+          # else in this file while silently changing every other project's
+          # environment. The interpreter is named by path rather than by PATH so
+          # that this asks about the one the build used.
+          BINDING_PY="$(brew --prefix)/bin/python$BINDING_PYTHON_SERIES"
+          [ -x "$BINDING_PY" ] || { echo "no $BINDING_PY"; exit 1; }
+          if "$BINDING_PY" -c 'import dreal' 2>/dev/null; then
+            echo "dreal is importable without PYTHONPATH; the install is not confined to $INSTALL_ROOT_BASENAME"
+            exit 1
+          fi
+          echo "the package is staged, not installed into the interpreter"
+
+      - name: "the binding: one C++ runtime, no libpython, one libibex"
+        run: |
+          set -eu
+          . ./versions.lock
+          BIN="$(brew --prefix)/bin/dreal"
+          PKG_DIR="$(brew --prefix)/$INSTALL_ROOT_BASENAME/lib/python$BINDING_PYTHON_SERIES/site-packages/dreal"
+          IBEX="$(otool -L "$BIN" | awk '/libibex/ {print $1; exit}')"
+          [ -n "$IBEX" ] || { echo "the installed dreal does not link libibex"; exit 1; }
+
+          fail=0
+          for f in "$PKG_DIR/_dreal_py.so" "$PKG_DIR/_odr_test_module_py.so" "$PKG_DIR/libdreal.so"; do
+            n="${f##*/}"
+            libs="$(otool -L "$f")"
+
+            # One C++ runtime per process, as for the CLI.
+            printf '%s\n' "$libs" | grep -q libstdc++ \
+              || { echo "$n does not link libstdc++"; fail=1; }
+            printf '%s\n' "$libs" | grep -q 'libc++' \
+              && { echo "$n links libc++ as well as libstdc++"; fail=1; }
+
+            # The module is loaded by whichever 3.11 interpreter asks for it, so
+            # it must not pin one build of CPython.
+            printf '%s\n' "$libs" | grep -q libpython \
+              && { echo "$n links libpython"; fail=1; }
+
+            # The install must be independent of where it was built.
+            printf '%s\n' "$libs" | tail -n +2 \
+              | grep -Eq '/bazel-|execroot|/\.cache/bazel|dreal-macos15/src|ibex-install|/tmp/|/var/folders/' \
+              && { echo "$n references a build or cache directory"; fail=1; }
+
+            # One symbolic layer: the extension modules carry none of dReal
+            # themselves and load libdreal.so from beside themselves. This is
+            # what dreal/test/python/odr_test.py guards from the inside.
+            if [ "$n" != "libdreal.so" ]; then
+              printf '%s\n' "$libs" | grep -q '@loader_path/libdreal.so' \
+                || { echo "$n does not load its sibling libdreal.so"; fail=1; }
+            fi
+
+            # One IBEX per machine: the same dylib the CLI resolved above.
+            got="$(printf '%s\n' "$libs" | awk '/libibex/ {print $1; exit}')"
+            [ "$got" = "$IBEX" ] \
+              || { echo "$n resolves ${got:-no libibex}; the CLI resolves $IBEX"; fail=1; }
+          done
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo "binding linkage invariants hold"
 
       - name: build logs
         if: always()

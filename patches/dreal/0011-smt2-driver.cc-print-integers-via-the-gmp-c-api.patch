@@ -1,0 +1,26 @@
+--- a/dreal/smt2/driver.cc
++++ b/dreal/smt2/driver.cc
+@@ -156,10 +156,20 @@
+ }
+ 
+ string ToString(const mpz_class& z) {
+-  if (sgn(z) == -1) {
+-    return fmt::format("(- {})", -z);
++  // Not fmt::format("{}", z). fmt has no formatter for mpz_class, so it falls
++  // back to streaming, which resolves to libgmpxx's
++  // operator<<(std::ostream&, __mpz_struct const*). That library is built
++  // against libc++ and this binary against libstdc++, so the two disagree on
++  // the std::ostream type in the signature and the symbol never binds; on
++  // macOS the call then jumps to 0 and the driver segfaults. get_str() is
++  // inline in gmpxx.h and goes through GMP's C API instead, so nothing here
++  // depends on libgmpxx's C++ ABI. See docs/macos.md.
++  const string s{z.get_str()};
++  // dReal writes a negative integer as an SMT-LIB application, `(- 5)`.
++  if (s.front() == '-') {
++    return fmt::format("(- {})", s.substr(1));
+   }
+-  return fmt::format("{}", z);
++  return s;
+ }
+ 
+ string ToRational(const double d) {

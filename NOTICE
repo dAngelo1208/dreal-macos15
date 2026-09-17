@@ -14,5 +14,15 @@ IBEX, built here from dreal-deps/ibex-lib at the revision pinned in
 versions.lock, is licensed under the GNU Lesser General Public License,
 version 3, and is linked dynamically.
 
+The Python binding is compiled against pybind11 (https://github.com/pybind/pybind11),
+licensed under the BSD 3-Clause License. pybind11 is header-only, so it is
+compiled into the extension module and is not a separate redistributed file; the
+revision is pinned in versions.lock and fetched by the build. The installed
+`dreal` Python package also includes dReal's own `dreal/__init__.py`, which is
+part of dReal and Apache-2.0.
+
+Python itself is not redistributed: the build uses the interpreter the host
+already has (see Brewfile), and the extension module links no libpython.
+
 See docs/upstream-licenses.md for the licences of everything else this build
 requires or links, and for what they oblige anyone redistributing a binary.

@@ -58,6 +58,23 @@ tests; see `tests/test_binary.sh`).
 There is deliberately no `libc++` in that list: see the compiler shim in
 [docs/macos.md](macos.md) for why dReal and IBEX share one C++ runtime.
 
+## What the installed Python package contains
+
+`scripts/install_binding.sh` stages four files as the `dreal` package, and the
+same table applies to them:
+
+| File | Origin | Licence |
+|---|---|---|
+| `__init__.py` | dReal, unmodified | Apache-2.0 |
+| `_dreal_py.so` | Compiled here from dReal, with pybind11 compiled in | Apache-2.0, plus BSD-3-Clause for pybind11 |
+| `_odr_test_module_py.so` | Compiled here from dReal; the module upstream keeps for its own ODR test | Apache-2.0, plus BSD-3-Clause for pybind11 |
+| `libdreal.so` | Compiled here from dReal | Apache-2.0 |
+
+None of them links `libibex.dylib` statically — the package resolves the same
+dynamically-loaded `libibex.dylib` the CLI uses — and none links `libpython`, so
+distributing the package does not redistribute Python. `BINDING-INFO` in the
+package records which interpreter series it is bound to.
+
 ## Build-time only
 
 Nothing here is redistributed by this repository, and none of it is linked into
@@ -72,6 +89,7 @@ the result except as noted.
 | Bazel | 5.4.1 | Apache-2.0 | Downloaded by bazelisk |
 | bazelisk | 1.29.0 | Apache-2.0 | |
 | Python | 3.10.21 | Python-2.0 | Runs IBEX's bundled Waf 2.0.12 |
+| Python | 3.11.16 | Python-2.0 | Compiles the Python binding and runs its tests. Not redistributed, and not linked: the extension module resolves CPython's symbols from whichever 3.11 interpreter loads it |
 
 ## Third-party code compiled into dReal
 
@@ -96,6 +114,7 @@ build actually pulls in.
 | grailbio `bazel-compilation-database` | Apache-2.0 | No; build tooling |
 | tensorflow (vendored subset) | Apache-2.0 | No; Bazel configure helpers only |
 | googletest | BSD-3-Clause | No; tests only |
+| pybind11 | BSD-3-Clause | Yes, header-only, in the Python extension module only; dReal annotates it "BSD", and `patches/dreal/0010` moves the pinned revision from v2.6.2 to v2.11.1 |
 | bazel_skylib, rules_python, rules_pkg | Apache-2.0 | No; build tooling |
 | google_styleguide | BSD-3-Clause | No; lint tooling |
 | pycodestyle | Expat (MIT-like) | No; lint tooling |
@@ -107,7 +126,8 @@ build actually pulls in.
 - Keep `LICENSE` and `NOTICE`, and keep the upstream notices for dReal, IBEX and
   the vendored third-party components.
 - Supply the source of the modified IBEX, as described above.
-- Do not static-link `libibex.dylib`.
+- Do not static-link `libibex.dylib`. The installed Python package does not: it
+  records the same `libibex.dylib` the CLI installs.
 - The CLP and CoinUtils libraries are EPL-2.0. This project takes them from
   Homebrew and does not redistribute them; if you bundle them (for example
   inside a self-contained `.app`), their obligations — including making the

@@ -1,4 +1,4 @@
-# Pinned inputs for dReal for macOS 15+ (Apple Silicon), v0.1
+# Pinned inputs for dReal for macOS 15+ (Apple Silicon), v0.2
 #
 # Every upstream input is pinned by immutable revision and verified by SHA256
 # before use. scripts/lib/common.sh is the only consumer of this file; nothing
@@ -32,10 +32,27 @@ IBEX_SRCDIR=ibex-lib-${IBEX_COMMIT}
 # bzlmod transition. bazelisk is used purely as a version launcher.
 BAZEL_VERSION=5.4.1
 
+# -------------------------------------------------------------- pybind11 ----
+# dReal's Bazel build fetches pybind11 itself (dreal/workspace.bzl); this is the
+# revision patches/dreal/0010 pins there, and the SHA256 is the GitHub archive
+# hash that `github_archive` verifies. It is not a runtime dependency: the
+# headers are compiled into the Python extension only.
+PYBIND11_VERSION=v2.11.1
+PYBIND11_SHA256=d475978da0cdc2d43b73f30910786759d593a9d8ee05b1b6846d1eb16c6d2e0c
+
 # --------------------------------------------------------------- Python ----
 # IBEX ships a Waf 2.0.12 build; it runs on Python 3 despite the python2.7
 # shebangs in its wscript files.
 IBEX_PYTHON_MIN=3.8
+
+# The Python binding is compiled against one interpreter's headers and loaded by
+# that interpreter's ABI, so its version is part of the artifact's identity
+# rather than a build detail: a `_dreal_py.so` built for one series is not
+# loadable by another. 3.11 is the only series that works today, from both ends:
+# pybind11 v2.11.1 is pinned to serve 3.11 and later, and dReal's vendored
+# python_configure reads the interpreter's include path through `distutils`,
+# which Python 3.12 removed.
+BINDING_PYTHON_SERIES=3.11
 
 # ------------------------------------------------------------ Install ------
 # Stable installation prefix. Nothing installed here may point back into

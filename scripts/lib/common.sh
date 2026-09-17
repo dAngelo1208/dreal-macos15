@@ -29,11 +29,11 @@ die()  { printf '%serr %s %s\n' "$_c_red" "$_c_reset" "$*" >&2; exit 1; }
 require_apple_silicon() {
   [ "$(uname -s)" = "Darwin" ] || die "this build targets macOS; found $(uname -s)"
   local arch; arch="$(uname -m)"
-  [ "$arch" = "arm64" ] || die "v0.1 targets Apple Silicon (arm64); found $arch.
+  [ "$arch" = "arm64" ] || die "this build targets Apple Silicon (arm64); found $arch.
 
-Intel macOS is out of scope for v0.1. If you are on an Intel Mac, Homebrew
-installs under /usr/local and the IBEX/libstdc++ pinning assumptions do not
-hold. See docs/macos.md."
+Intel macOS is out of scope. If you are on an Intel Mac, Homebrew installs
+under /usr/local and the IBEX/libstdc++ pinning assumptions do not hold. See
+docs/macos.md."
 }
 
 require_macos_version() {
@@ -129,6 +129,54 @@ setup_bazel() {
   ok "bazel $got (via $BAZELISK)"
 }
 
+# Every Bazel invocation in this repository shares these flags. They are defined
+# once because the CLI build and the binding build must not drift: a flag that
+# reaches one and not the other is exactly how a build starts depending on the
+# machine rather than on this repository. The four that need explaining:
+#
+# CC is the shim from setup_gcc: it rewrites the `-lc++` that Bazel's Darwin
+# toolchain hardcodes on every C++ link line into `-lstdc++`, so everything links
+# the same C++ runtime as the GCC-built IBEX. DREAL_REAL_CC has to be passed as an
+# action env as well as a repo env: the compile and link actions run in a sandbox
+# with a stripped environment, and the repository rule that identifies the
+# compiler runs in the client environment. Neither would see it otherwise.
+#
+# BAZEL_USE_CPP_ONLY_TOOLCHAIN keeps Bazel's auto-configured toolchain away from
+# its Xcode branch, which hardcodes Apple clang and ignores CC entirely
+# (osx_cc_configure.bzl). Without it, the same tree is built by the GCC shim on a
+# machine with only the Command Line Tools and by clang on a machine with Xcode,
+# and the clang build fails at link with unresolved ibex::operator<< symbols --
+# libc++ manglings looking for symbols that the GCC-built IBEX does not export.
+# Which toolchain a machine produces must not depend on whether Xcode is
+# installed, so the choice is made here, explicitly, on every machine.
+#
+# PYTHON_BIN_PATH is not in this list: the CLI build passes the interpreter from
+# setup_bazel_python and the binding build the one from setup_binding_python, so
+# each script adds it.
+#
+# Call this after setup_gcc, setup_bison_flex, setup_pkg_config_path and
+# setup_bazel -- it reads what they export.
+BAZEL_COMMON_FLAGS=()
+setup_bazel_flags() {
+  GMP_PREFIX="$(brew --prefix gmp 2>/dev/null || true)"
+  [ -n "$GMP_PREFIX" ] || die "Homebrew gmp not found; run scripts/bootstrap_macos.sh"
+  export GMP_PREFIX
+  BAZEL_COMMON_FLAGS=(
+    --config=macos_arm64
+    --repo_env=BAZEL_USE_CPP_ONLY_TOOLCHAIN=1
+    --repo_env=PKG_CONFIG
+    --repo_env=PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
+    --repo_env=HOMEBREW_PREFIX="$BREW_PREFIX"
+    --repo_env=GMP_PREFIX="$GMP_PREFIX"
+    --repo_env=CC="$CC"
+    --repo_env=CXX="$CXX"
+    --repo_env=DREAL_REAL_CC="$DREAL_REAL_CC"
+    --action_env=DREAL_REAL_CC="$DREAL_REAL_CC"
+    --repo_env=BISON="$BISON"
+    --repo_env=PATH
+  )
+}
+
 # IBEX ships Waf 2.0.12, which imports the `imp` module (removed in Python 3.12)
 # and opens wscript files in 'rU' mode (removed in 3.11). Only Python <= 3.10 can
 # run it, and Homebrew's python3 is far newer, so the interpreter that happens to
@@ -190,6 +238,13 @@ Run scripts/bootstrap_macos.sh to install Homebrew python@3.10."
 # interpreter is chosen here -- by running the same expression the rule runs --
 # and handed to Bazel as PYTHON_BIN_PATH; the rule declares it in `environ`, so
 # `--repo_env` reaches it (see scripts/build_dreal.sh).
+#
+# Python 3.11, when it is installed, is chosen ahead of anything older: it is the
+# series the Python binding is compiled against (BINDING_PYTHON_SERIES in
+# versions.lock) and it still ships distutils, so a single interpreter serves
+# both the Bazel build and the binding. 3.10 and the Command Line Tools' 3.9 stay
+# as fallbacks, which is what keeps a CLI-only build working on a machine that
+# has neither Homebrew python.
 _bazel_python_ok() {
   local inc
   inc="$("$1" -c 'from distutils import sysconfig; print(sysconfig.get_python_inc())' 2>/dev/null)" \
@@ -200,6 +255,8 @@ setup_bazel_python() {
   local prefix py
   local -a candidates=()
 
+  prefix="$(brew --prefix "python@$BINDING_PYTHON_SERIES" 2>/dev/null || true)"
+  [ -n "$prefix" ] && candidates+=("$prefix/bin/python$BINDING_PYTHON_SERIES")
   prefix="$(brew --prefix python@3.10 2>/dev/null || true)"
   [ -n "$prefix" ] && candidates+=("$prefix/bin/python3.10")
   # The Command Line Tools interpreter is a usable fallback: it is Python 3.9
@@ -227,7 +284,56 @@ $(printf '  %s\n' "${candidates[@]}")
 This can look like it works when the interpreter happens to have setuptools
 installed, because setuptools provides a distutils shim; that is an accident of
 the machine and not something to depend on.
-Run scripts/bootstrap_macos.sh to install Homebrew python@3.10."
+Run scripts/bootstrap_macos.sh to install Homebrew python@$BINDING_PYTHON_SERIES
+(python@3.10 also works for a CLI-only build)."
+}
+
+# The interpreter the Python binding is compiled against. Unlike the two probes
+# above, this is not a search for something that works: the extension is loaded
+# by one interpreter series and no other, so the series in versions.lock is the
+# answer and anything else is wrong.
+#
+# BINDING_PYTHON overrides the resolution, which is how a binding is built for an
+# interpreter Homebrew does not manage, e.g. a conda environment:
+#   make binding BINDING_PYTHON=/path/to/envs/foo/bin/python
+# Any 3.11 does the job: the ABI tag is the series, not the distribution, so a
+# module built by one 3.11 loads in another.
+#
+# Note what is *not* checked here: that the interpreter can answer dReal's
+# python_configure rule (see _bazel_python_ok). That is a requirement of
+# *building* the binding, and only scripts/build_binding.sh needs to assert it;
+# installing a binding that is already built does not, and refusing a perfectly
+# good 3.11 here would turn a conda interpreter into an inexplicable failure.
+setup_binding_python() {
+  local prefix py
+  local -a candidates=()
+
+  py="${BINDING_PYTHON:-}"
+  [ -n "$py" ] && candidates+=("$py")
+  prefix="$(brew --prefix "python@$BINDING_PYTHON_SERIES" 2>/dev/null || true)"
+  [ -n "$prefix" ] && candidates+=("$prefix/bin/python$BINDING_PYTHON_SERIES")
+  py="$(command -v "python$BINDING_PYTHON_SERIES" 2>/dev/null || true)"
+  [ -n "$py" ] && candidates+=("$py")
+
+  for py in "${candidates[@]}"; do
+    [ -x "$py" ] || continue
+    [ "$("$py" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)" \
+        = "$BINDING_PYTHON_SERIES" ] || continue
+    export BINDING_PYTHON="$py"
+    ok "binding python $("$py" -c 'import sys; print(sys.version.split()[0])') ($py)"
+    return 0
+  done
+
+  die "no Python $BINDING_PYTHON_SERIES to build or install the Python binding
+against.
+
+The extension is ABI-locked to the interpreter series it is compiled for, so
+$BINDING_PYTHON_SERIES is a requirement rather than a preference. Tried:
+$(printf '  %s\n' "${candidates[@]}")
+
+Run scripts/bootstrap_macos.sh to install Homebrew python@$BINDING_PYTHON_SERIES,
+or name one:
+  make binding BINDING_PYTHON=/path/to/python$BINDING_PYTHON_SERIES"
 }
 
 # ------------------------------------------------------------- build env ---

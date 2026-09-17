@@ -18,7 +18,7 @@ for arg in "$@"; do
   esac
 done
 
-log "dReal for macOS 15+ (Apple Silicon) v0.1 -- bootstrap"
+log "dReal for macOS 15+ (Apple Silicon) v0.2 -- bootstrap"
 
 # ----------------------------------------------------------- host checks ---
 require_apple_silicon
@@ -30,6 +30,8 @@ xcode-select -p >/dev/null 2>&1 \
 Run:  xcode-select --install"
 ok "Command Line Tools at $(xcode-select -p)"
 
+# Last-resort interpreter for IBEX's Waf, used only if the versioned Homebrew
+# ones are missing. python@3.10 is the one that is actually installed below.
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' \
   || die "Python 3.8+ required on PATH"
 
@@ -44,7 +46,8 @@ else
   log "skipping Homebrew installs (--skip-brew)"
 fi
 
-for f in bison flex gmp nlopt clp coinutils pkgconf gcc bazelisk python@3.10; do
+for f in bison flex gmp nlopt clp coinutils pkgconf gcc bazelisk \
+         python@3.10 python@3.11; do
   brew list --formula "$f" >/dev/null 2>&1 || die "missing Homebrew formula: $f"
 done
 ok "Homebrew dependencies present"
@@ -56,6 +59,10 @@ setup_gcc
 setup_bison_flex
 setup_pkg_config
 setup_ibex_python
+
+# The binding's interpreter is a pinned input rather than a preference, so a
+# missing one is reported here, before an hour of compiling rather than after.
+setup_binding_python
 
 # -------------------------------------------------------------- sources ----
 setup_build_root
@@ -70,10 +77,13 @@ log "bootstrap complete"
 cat <<EOF
 
 Next:
-  scripts/build_ibex.sh      # IBEX $IBEX_VERSION, direct interval library
-  scripts/build_dreal.sh     # dReal $DREAL_VERSION
-  scripts/install_macos.sh   # install to $BREW_PREFIX/$INSTALL_ROOT_BASENAME
-  tests/test_binary.sh       # acceptance tests
+  scripts/build_ibex.sh        # IBEX $IBEX_VERSION, direct interval library
+  scripts/build_dreal.sh       # dReal $DREAL_VERSION
+  scripts/install_macos.sh     # install to $BREW_PREFIX/$INSTALL_ROOT_BASENAME
+  scripts/build_binding.sh     # the Python extension module
+  scripts/install_binding.sh   # stage `import dreal`
+  tests/test_binary.sh         # CLI acceptance tests
+  tests/test_binding.sh        # Python binding acceptance tests
 
 Or in one step:  make all
 

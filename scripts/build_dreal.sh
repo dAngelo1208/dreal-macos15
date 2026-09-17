@@ -44,7 +44,7 @@ prepare_source "$BUILD_SRC/$DREAL_TARBALL" "$DREAL_SRCDIR" \
 
 cd "$DREAL_SRC"
 
-GMP_PREFIX="$(brew --prefix gmp)"
+setup_bazel_flags
 
 # Bazel's server holds a snapshot of the client environment from when it
 # started. A long-lived server would otherwise reuse a stale PKG_CONFIG_PATH
@@ -54,49 +54,39 @@ GMP_PREFIX="$(brew --prefix gmp)"
 log "bazel shutdown (drop any stale client environment)"
 "$BAZELISK" shutdown >/dev/null 2>&1 || true
 
-# CC is the shim from scripts/lib/common.sh: it rewrites the `-lc++` that
-# Bazel's Darwin toolchain hardcodes on every C++ link line into `-lstdc++`, so
-# the binary links the same C++ runtime as the GCC-built IBEX. DREAL_REAL_CC has
-# to be passed as an action env as well as a repo env: the compile and link
-# actions run in a sandbox with a stripped environment, and the repository rule
-# that identifies the compiler runs in the client environment. Neither would see
-# it otherwise.
+# The flags shared by every build in this repository -- the GCC shim, the
+# pkg-config paths, BAZEL_USE_CPP_ONLY_TOOLCHAIN -- come from setup_bazel_flags
+# (scripts/lib/common.sh), which documents what each one is for. Only the
+# interpreter is per-build.
+#
 # PYTHON_BIN_PATH is read by the vendored TensorFlow python_configure repository
 # rule, which otherwise falls back to whatever `python3` is on PATH -- and a
 # Python 3.12+ interpreter has no distutils, so the fetch fails and the build
-# dies during analysis. setup_bazel_python (scripts/lib/common.sh) probes for an
-# interpreter that still works and pins it here. It is a repository env because
-# repository rules see the declared client environment, not the sandbox's.
+# dies during analysis. setup_bazel_python probes for one that still works and
+# pins it here. It is a repository env because repository rules see the declared
+# client environment, not the sandbox's; for the same reason the CLI build passes
+# it here and the binding build passes setup_binding_python's in its place.
 #
-# BAZEL_USE_CPP_ONLY_TOOLCHAIN keeps Bazel's auto-configured toolchain away from
-# its Xcode branch, which hardcodes Apple clang and ignores CC entirely
-# (osx_cc_configure.bzl). Without it, the same tree is built by the GCC shim on a
-# machine with only the Command Line Tools and by clang on a machine with Xcode,
-# and the clang build fails at link with unresolved ibex::operator<< symbols --
-# libc++ manglings looking for symbols that the GCC-built IBEX does not export.
-# Which toolchain a machine produces must not depend on whether Xcode is
-# installed, so the choice is made here, explicitly, on every machine.
+# `-- args...` appends to the Bazel command line. It is how a one-off flag is used
+# without editing this script; it is appended after this script's own options, so
+# a flag that also appears above is overridden by the one given here.
+bazel_args=(
+  build
+  "${BAZEL_COMMON_FLAGS[@]}"
+  --repo_env=PYTHON_BIN_PATH="$BAZEL_PYTHON"
+  --jobs="$JOBS"
+  --noshow_progress
+)
+if [ "${#EXTRA_ARGS[@]}" -gt 0 ]; then
+  bazel_args+=("${EXTRA_ARGS[@]}")
+fi
+bazel_args+=(//dreal:dreal)
+
 log "building //dreal:dreal"
 set -o pipefail
 CC="$CC" \
 CXX="$CXX" \
-"$BAZELISK" build \
-  --config=macos_arm64 \
-  --jobs="$JOBS" \
-  --noshow_progress \
-  --repo_env=BAZEL_USE_CPP_ONLY_TOOLCHAIN=1 \
-  --repo_env=PKG_CONFIG \
-  --repo_env=PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
-  --repo_env=HOMEBREW_PREFIX="$BREW_PREFIX" \
-  --repo_env=GMP_PREFIX="$GMP_PREFIX" \
-  --repo_env=PYTHON_BIN_PATH="$BAZEL_PYTHON" \
-  --repo_env=CC="$CC" \
-  --repo_env=CXX="$CXX" \
-  --repo_env=DREAL_REAL_CC="$DREAL_REAL_CC" \
-  --action_env=DREAL_REAL_CC="$DREAL_REAL_CC" \
-  --repo_env=BISON="$BISON" \
-  --repo_env=PATH \
-  //dreal:dreal 2>&1 | tee "$LOG"
+"$BAZELISK" "${bazel_args[@]}" 2>&1 | tee "$LOG"
 
 BIN="$DREAL_SRC/bazel-bin/dreal/dreal"
 [ -x "$BIN" ] || die "build produced no binary at $BIN"

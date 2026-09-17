@@ -88,6 +88,22 @@ else
   printf '  FAIL  unresolved dependencies:\n%s' "$UNRESOLVED"; fail=$((fail + 1))
 fi
 
+# A dependency that exists is not yet a dependency that works: dyld will happily
+# bind a C++ symbol to 0 rather than fail, so a call to it jumps to null. This
+# caught a real one -- the SMT2 driver formatted an mpz_class with fmt, which
+# streams it through libgmpxx, whose C++ interface is built against libc++.
+# `(get-value ...)` segfaulted. patches/dreal/0011 is the fix; see docs/macos.md.
+if CLOSURE="$("$HERE/lib/symbol-closure.sh" "$BINARY" 2>&1)"; then
+  if [ -z "$CLOSURE" ]; then
+    printf '  PASS  every C++ symbol it needs has a provider\n'; pass=$((pass + 1))
+  else
+    printf '  FAIL  C++ symbols with no provider (a call to one jumps to 0):\n%s\n' \
+      "$CLOSURE"; fail=$((fail + 1))
+  fi
+else
+  printf '  FAIL  could not compute the symbol closure:\n%s\n' "$CLOSURE"; fail=$((fail + 1))
+fi
+
 # ---------------------------------------------------------------------------
 section "runs without a build environment"
 
