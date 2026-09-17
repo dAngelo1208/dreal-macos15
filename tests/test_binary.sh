@@ -52,7 +52,9 @@ section "binary identity"
 
 check "file reports arm64" "arm64" "$(file "$BINARY")"
 check "file reports Mach-O executable" "Mach-O 64-bit" "$(file "$BINARY")"
-check "dreal --version" "v$DREAL_VERSION" "$("$BINARY" --version 2>&1)"
+# stdout only: a version string that arrives on stderr, alongside a diagnostic,
+# is not a working binary.
+check "dreal --version" "v$DREAL_VERSION" "$("$BINARY" --version 2>/dev/null)"
 
 # ---------------------------------------------------------------------------
 section "linkage"
@@ -131,8 +133,12 @@ else
   elif ! "$CONDA" env list 2>/dev/null | grep -qE '(^|\s)mikl(\s|$)'; then
     printf '  SKIP  conda environment "mikl" not present\n'
   else
+    # `conda run` can emit its own diagnostics; capture them separately so that
+    # a version string on stderr cannot be mistaken for a successful run.
+    CONDA_ERR="$("$CONDA" run -n mikl dreal --version 2>&1 >/dev/null)"
     check "conda run -n mikl dreal --version" "v$DREAL_VERSION" \
-          "$("$CONDA" run -n mikl dreal --version 2>&1)"
+          "$("$CONDA" run -n mikl dreal --version 2>/dev/null)"
+    [ -z "$CONDA_ERR" ] || printf '  WARN  conda wrote to stderr:\n        %s\n' "$CONDA_ERR"
   fi
 fi
 
