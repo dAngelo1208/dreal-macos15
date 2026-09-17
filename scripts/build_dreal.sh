@@ -67,6 +67,15 @@ log "bazel shutdown (drop any stale client environment)"
 # dies during analysis. setup_bazel_python (scripts/lib/common.sh) probes for an
 # interpreter that still works and pins it here. It is a repository env because
 # repository rules see the declared client environment, not the sandbox's.
+#
+# BAZEL_USE_CPP_ONLY_TOOLCHAIN keeps Bazel's auto-configured toolchain away from
+# its Xcode branch, which hardcodes Apple clang and ignores CC entirely
+# (osx_cc_configure.bzl). Without it, the same tree is built by the GCC shim on a
+# machine with only the Command Line Tools and by clang on a machine with Xcode,
+# and the clang build fails at link with unresolved ibex::operator<< symbols --
+# libc++ manglings looking for symbols that the GCC-built IBEX does not export.
+# Which toolchain a machine produces must not depend on whether Xcode is
+# installed, so the choice is made here, explicitly, on every machine.
 log "building //dreal:dreal"
 set -o pipefail
 CC="$CC" \
@@ -75,6 +84,7 @@ CXX="$CXX" \
   --config=macos_arm64 \
   --jobs="$JOBS" \
   --noshow_progress \
+  --repo_env=BAZEL_USE_CPP_ONLY_TOOLCHAIN=1 \
   --repo_env=PKG_CONFIG \
   --repo_env=PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
   --repo_env=HOMEBREW_PREFIX="$BREW_PREFIX" \

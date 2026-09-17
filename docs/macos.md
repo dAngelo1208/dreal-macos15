@@ -238,6 +238,39 @@ binary's `otool -L` lists `libc++`, and `nm -u` lists only libstdc++ manglings
 `libstdc++` that arrives transitively through `libibex`. With the shim, the
 binary records `libstdc++` directly and no libc++ at all.
 
+**`BAZEL_USE_CPP_ONLY_TOOLCHAIN`, so Xcode cannot choose the compiler.** Bazel's
+auto-configured Darwin toolchain has two branches, and it picks between them by
+asking its Xcode locator whether an Xcode is installed:
+
+```python
+# external/bazel_tools/tools/cpp/osx_cc_configure.bzl
+if xcode_toolchains:
+    # For Xcode toolchains, there's no reason to use anything other than
+    # wrapped_clang ...
+    cc_path = '"$(/usr/bin/dirname "$0")"/wrapped_clang'
+```
+
+The Xcode branch hardcodes Apple's clang and never looks at `CC` at all. The
+other branch, `configure_unix_toolchain`, honours it. So the *same* tree, built
+by the *same* script, is compiled by Homebrew GCC on a machine with only the
+Command Line Tools and by Apple clang on a machine with Xcode — and both
+machines report `ok gcc 16 (… via cc-wrapper.sh)` while it happens, because the
+shim was handed to a toolchain that discarded it.
+
+The clang build does not fail at the compiler, it fails at the link, with
+unresolved `ibex::operator<<` symbols whose parameters are mangled
+`std::__1::basic_ostream` — libc++ manglings, looking for overloads that the
+GCC-built `libibex.dylib` does not export. Nothing about the message points at
+the toolchain, which is the reason this is written down: it reads like a source
+problem in dReal's `display` and `fmt` code, and it is not.
+
+`BAZEL_USE_CPP_ONLY_TOOLCHAIN=1` is upstream's own switch for this — its comment
+reads "Should we unconditionally *not* use xcode?" — and it is passed as a
+`--repo_env` because `cc_autoconf` declares it in `environ`. dReal has no
+Objective-C, so nothing is lost. Which compiler this build uses is now decided
+in one place, on every machine, rather than by what the machine happens to have
+installed.
+
 **Python 3.10 for the IBEX build.** IBEX ships Waf 2.0.12, which needs a Python
 older than 3.11: it imports `imp`, removed in 3.12, and opens `wscript` files in
 `rU` mode, removed in 3.11. Homebrew's `python3` is 3.14. `setup_ibex_python` in
@@ -297,6 +330,7 @@ it exports everything downstream:
 | Variable | Set by | Read by |
 |---|---|---|
 | `CC` | `setup_gcc` | IBEX's waf, Bazel's `--repo_env`. The shim, not `gcc` |
+| `BAZEL_USE_CPP_ONLY_TOOLCHAIN` | `scripts/build_dreal.sh` | `cc_autoconf`, which would otherwise let Xcode pick clang |
 | `CXX` | `setup_gcc` | IBEX's waf, Bazel's `--repo_env`. The real `g++` |
 | `DREAL_REAL_CC` | `setup_gcc` | the shim; reaches Bazel as `--repo_env` and `--action_env` |
 | `BISON` | `setup_bison_flex` | the `local_lexyacc_repository` rule |
