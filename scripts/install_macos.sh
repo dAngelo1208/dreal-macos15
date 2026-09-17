@@ -26,6 +26,7 @@ done
 require_apple_silicon
 setup_homebrew
 setup_gcc
+setup_pkg_config
 setup_build_root
 
 INSTALL_ROOT="${PREFIX_OVERRIDE:-$BREW_PREFIX/$INSTALL_ROOT_BASENAME}"
